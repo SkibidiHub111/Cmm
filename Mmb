@@ -2,15 +2,10 @@ local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
-
-local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
-local DrawingCache = {}
+local Camera = workspace.CurrentCamera
 
-local connections = getconnections(ReplicatedStorage.GameEvents.PetEggService.OnClientEvent)
-local hatchFunc = getupvalue(getupvalue(connections[1].Function, 1), 2)
-local eggPets = getupvalue(hatchFunc, 2)
+DrawingCache = DrawingCache or {}
 
 local function createESP(id, text, color)
     if DrawingCache[id] then return end
@@ -21,42 +16,22 @@ local function createESP(id, text, color)
     label.Center = true
     label.Outline = true
     label.OutlineColor = Color3.new(0, 0, 0)
-    label.Visible = false
-    DrawingCache[id] = {label = label}
+    label.Visible = true
+
+    DrawingCache[id] = {
+        label = label,
+        text = text,
+        color = color,
+    }
 end
 
 local function removeESP(id)
     if DrawingCache[id] then
-        if DrawingCache[id].label then DrawingCache[id].label:Remove() end
+        if DrawingCache[id].label then
+            DrawingCache[id].label:Remove()
+        end
         DrawingCache[id] = nil
     end
-end
-
-if getgenv().Config and getgenv().Config["ESP"] and getgenv().Config["ESP"]["PetEgg"] == true then
-    for _, egg in ipairs(CollectionService:GetTagged("PetEggServer")) do
-        if egg:GetAttribute("OWNER") == LocalPlayer.Name then
-            local uuid = egg:GetAttribute("OBJECT_UUID")
-            if uuid and not DrawingCache[uuid] then
-                local petName = eggPets[uuid] or "?"
-                createESP(uuid, petName, Color3.fromRGB(0, 255, 0))
-            end
-        end
-    end
-
-    CollectionService:GetInstanceAddedSignal("PetEggServer"):Connect(function(egg)
-        if egg:GetAttribute("OWNER") == LocalPlayer.Name then
-            local uuid = egg:GetAttribute("OBJECT_UUID")
-            if uuid and not DrawingCache[uuid] then
-                local petName = eggPets[uuid] or "?"
-                createESP(uuid, petName, Color3.fromRGB(0, 255, 0))
-            end
-        end
-    end)
-
-    CollectionService:GetInstanceRemovedSignal("PetEggServer"):Connect(function(egg)
-        local uuid = egg:GetAttribute("OBJECT_UUID")
-        removeESP(uuid)
-    end)
 end
 
 if getgenv().Config and getgenv().Config["ESP"] and getgenv().Config["ESP"]["Player"] == true then
@@ -83,21 +58,45 @@ end
 if getgenv().Config and getgenv().Config["ESP"] and getgenv().Config["ESP"]["Pollinated"] == true then
     for _, plant in ipairs(CollectionService:GetTagged("Plant")) do
         if plant:GetAttribute("Pollinated") then
-            local id = "plant_" .. plant:GetDebugId()
-            createESP(id, "🌸 Pollinated", Color3.fromRGB(255, 105, 180))
+            createESP("plant_" .. plant:GetDebugId(), "🌸 Pollinated", Color3.fromRGB(255, 105, 180))
         end
     end
 
     CollectionService:GetInstanceAddedSignal("Plant"):Connect(function(plant)
         if plant:GetAttribute("Pollinated") then
-            local id = "plant_" .. plant:GetDebugId()
-            createESP(id, "🌸 Pollinated", Color3.fromRGB(255, 105, 180))
+            createESP("plant_" .. plant:GetDebugId(), "🌸 Pollinated", Color3.fromRGB(255, 105, 180))
         end
     end)
 
     CollectionService:GetInstanceRemovedSignal("Plant"):Connect(function(plant)
-        local id = "plant_" .. plant:GetDebugId()
-        removeESP(id)
+        removeESP("plant_" .. plant:GetDebugId())
+    end)
+end
+
+if getgenv().Config and getgenv().Config["ESP"] and getgenv().Config["ESP"]["Egg"] == true then
+    local connections = getconnections(ReplicatedStorage.GameEvents.PetEggService.OnClientEvent)
+    local hatchFunc = getupvalue(getupvalue(connections[1].Function, 1), 2)
+    local eggPets = getupvalue(hatchFunc, 2)
+
+    for _, egg in ipairs(CollectionService:GetTagged("PetEggServer")) do
+        if egg:GetAttribute("OWNER") == LocalPlayer.Name then
+            local uuid = egg:GetAttribute("OBJECT_UUID")
+            local petName = eggPets[uuid] or "?"
+            createESP(uuid, "🥚 " .. petName, Color3.fromRGB(0, 255, 0))
+        end
+    end
+
+    CollectionService:GetInstanceAddedSignal("PetEggServer"):Connect(function(egg)
+        if egg:GetAttribute("OWNER") == LocalPlayer.Name then
+            local uuid = egg:GetAttribute("OBJECT_UUID")
+            local petName = eggPets[uuid] or "?"
+            createESP(uuid, "🥚 " .. petName, Color3.fromRGB(0, 255, 0))
+        end
+    end)
+
+    CollectionService:GetInstanceRemovedSignal("PetEggServer"):Connect(function(egg)
+        local uuid = egg:GetAttribute("OBJECT_UUID")
+        if uuid then removeESP(uuid) end
     end)
 end
 
@@ -106,8 +105,7 @@ RunService.RenderStepped:Connect(function()
         local instance
 
         if id:sub(1, 7) == "player_" then
-            local plrName = id:sub(8)
-            local plr = Players:FindFirstChild(plrName)
+            local plr = Players:FindFirstChild(id:sub(8))
             if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                 instance = plr.Character.HumanoidRootPart
             end
