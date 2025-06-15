@@ -1,0 +1,138 @@
+local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local DrawingCache = {}
+
+local connections = getconnections(ReplicatedStorage.GameEvents.PetEggService.OnClientEvent)
+local hatchFunc = getupvalue(getupvalue(connections[1].Function, 1), 2)
+local eggPets = getupvalue(hatchFunc, 2)
+
+local function createESP(id, text, color)
+    if DrawingCache[id] then return end
+    local label = Drawing.new("Text")
+    label.Text = text
+    label.Size = 18
+    label.Color = color
+    label.Center = true
+    label.Outline = true
+    label.OutlineColor = Color3.new(0, 0, 0)
+    label.Visible = false
+    DrawingCache[id] = {label = label}
+end
+
+local function removeESP(id)
+    if DrawingCache[id] then
+        if DrawingCache[id].label then DrawingCache[id].label:Remove() end
+        DrawingCache[id] = nil
+    end
+end
+
+if getgenv().Config and getgenv().Config["ESP"] and getgenv().Config["ESP"]["PetEgg"] == true then
+    for _, egg in ipairs(CollectionService:GetTagged("PetEggServer")) do
+        if egg:GetAttribute("OWNER") == LocalPlayer.Name then
+            local uuid = egg:GetAttribute("OBJECT_UUID")
+            if uuid and not DrawingCache[uuid] then
+                local petName = eggPets[uuid] or "?"
+                createESP(uuid, petName, Color3.fromRGB(0, 255, 0))
+            end
+        end
+    end
+
+    CollectionService:GetInstanceAddedSignal("PetEggServer"):Connect(function(egg)
+        if egg:GetAttribute("OWNER") == LocalPlayer.Name then
+            local uuid = egg:GetAttribute("OBJECT_UUID")
+            if uuid and not DrawingCache[uuid] then
+                local petName = eggPets[uuid] or "?"
+                createESP(uuid, petName, Color3.fromRGB(0, 255, 0))
+            end
+        end
+    end)
+
+    CollectionService:GetInstanceRemovedSignal("PetEggServer"):Connect(function(egg)
+        local uuid = egg:GetAttribute("OBJECT_UUID")
+        removeESP(uuid)
+    end)
+end
+
+if getgenv().Config and getgenv().Config["ESP"] and getgenv().Config["ESP"]["Player"] == true then
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            createESP("player_" .. plr.Name, plr.Name, Color3.fromRGB(255, 255, 0))
+        end
+    end
+
+    Players.PlayerAdded:Connect(function(plr)
+        plr.CharacterAdded:Connect(function()
+            task.wait(1)
+            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                createESP("player_" .. plr.Name, plr.Name, Color3.fromRGB(255, 255, 0))
+            end
+        end)
+    end)
+
+    Players.PlayerRemoving:Connect(function(plr)
+        removeESP("player_" .. plr.Name)
+    end)
+end
+
+if getgenv().Config and getgenv().Config["ESP"] and getgenv().Config["ESP"]["Pollinated"] == true then
+    for _, plant in ipairs(CollectionService:GetTagged("Plant")) do
+        if plant:GetAttribute("Pollinated") then
+            local id = "plant_" .. plant:GetDebugId()
+            createESP(id, "🌸 Pollinated", Color3.fromRGB(255, 105, 180))
+        end
+    end
+
+    CollectionService:GetInstanceAddedSignal("Plant"):Connect(function(plant)
+        if plant:GetAttribute("Pollinated") then
+            local id = "plant_" .. plant:GetDebugId()
+            createESP(id, "🌸 Pollinated", Color3.fromRGB(255, 105, 180))
+        end
+    end)
+
+    CollectionService:GetInstanceRemovedSignal("Plant"):Connect(function(plant)
+        local id = "plant_" .. plant:GetDebugId()
+        removeESP(id)
+    end)
+end
+
+RunService.RenderStepped:Connect(function()
+    for id, data in pairs(DrawingCache) do
+        local instance
+
+        if id:sub(1, 7) == "player_" then
+            local plrName = id:sub(8)
+            local plr = Players:FindFirstChild(plrName)
+            if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                instance = plr.Character.HumanoidRootPart
+            end
+        elseif id:sub(1, 6) == "plant_" then
+            for _, plant in ipairs(CollectionService:GetTagged("Plant")) do
+                if "plant_" .. plant:GetDebugId() == id then
+                    instance = plant
+                    break
+                end
+            end
+        else
+            for _, egg in ipairs(CollectionService:GetTagged("PetEggServer")) do
+                if egg:GetAttribute("OBJECT_UUID") == id then
+                    instance = egg
+                    break
+                end
+            end
+        end
+
+        if instance then
+            local pos, onScreen = Camera:WorldToViewportPoint(instance:GetPivot().Position)
+            data.label.Position = Vector2.new(pos.X, pos.Y - 20)
+            data.label.Visible = onScreen
+        else
+            data.label.Visible = false
+        end
+    end
+end)
